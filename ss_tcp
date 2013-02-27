@@ -1,0 +1,262 @@
+#!/usr/bin/perl
+#
+# Quick'n'dirty munin plugin to graph the download speed and RTT to clients
+# connecting to port :http (80) and not being localhost as measured by ss
+# utility of iproute2.
+#
+# It makes a lot of sense to enable these options in the kernel or to load the
+# modules, it makes the ss utility faster by a wide margin.
+# 
+# INET: socket monitoring interface (INET_DIAG)
+#
+# CONFIG_INET_DIAG:
+#
+# Support for INET (TCP, DCCP, etc) socket monitoring interface used by
+# native Linux tools such as ss. ss is included in iproute2
+#
+#
+# UNIX: socket monitoring interface (UNIX_DIAG)
+#
+# CONFIG_UNIX_DIAG:
+#
+# Support for UNIX socket monitoring interface used by the ss tool.
+#
+#
+# UDP: socket monitoring interface (INET_UDP_DIAG)
+#
+# CONFIG_INET_UDP_DIAG:
+#
+# Support for UDP socket monitoring interface used by the ss tool.
+#
+#
+# Packet: sockets monitoring interface (PACKET_DIAG)
+#
+# CONFIG_PACKET_DIAG:
+#
+# Support for PF_PACKET sockets monitoring interface used by the ss tool.
+#
+#
+# Author: Jorge Nerín <jnerin@gmail.com>
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write to the Free Software Foundation, Inc.,
+# 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+
+
+use strict;
+use Statistics::Descriptive;
+
+sub get_stats {
+	my $desc = shift;
+
+	my $stat = Statistics::Descriptive::Full->new();
+	$stat->add_data(@_);
+	print $desc, "_total_count.value ", $stat->count(), "\n";
+	print $desc, "_min.value ", $stat->min(), "\n";
+	print $desc, "_max.value ", $stat->max(), "\n";
+	print $desc, "_mean.value ", $stat->mean(), "\n";
+	print $desc, "_trimmed_mean_01.value ", $stat->trimmed_mean(0.1, 0.1), "\n";
+
+	my $percentile;
+	my ($x, $index);
+	$percentile=5;
+	($x, $index) = $stat->percentile($percentile);
+	$x = "U" if ('' ==  $x);
+	print $desc, "_percentile_$percentile.value $x\n";
+	$percentile=50;
+	($x, $index) = $stat->percentile($percentile);
+	$x = "U" if ('' ==  $x);
+	print $desc, "_percentile_$percentile.value $x\n";
+	$percentile=95;
+	($x, $index) = $stat->percentile($percentile);
+	$x = "U" if ('' ==  $x);
+	print $desc, "_percentile_$percentile.value $x\n";
+
+}
+
+if ($ARGV[0] eq "config")
+{
+#graph_args --base 1000 -l 0.1 --logarithmic
+
+        print <<EOF;
+multigraph ss_tcp_speed
+graph_category network
+graph_title Client download speed
+graph_vlabel Download speed (bps)
+graph_args --base 1000 -l 0
+
+tcp_speed_total_count.label Total clients
+tcp_speed_total_count.type GAUGE
+tcp_speed_total_count.colour 000000
+tcp_speed_total_count.graph no
+tcp_speed_min.label Minimum speed
+tcp_speed_min.type GAUGE
+tcp_speed_min.colour ff00ff
+tcp_speed_max.label Maximum speed
+tcp_speed_max.type GAUGE
+tcp_speed_max.colour ffa500
+tcp_speed_mean.label Mean speed
+tcp_speed_mean.type GAUGE
+tcp_speed_mean.colour 4169e1
+tcp_speed_trimmed_mean_01.label 0.1 trimmed mean speed
+tcp_speed_trimmed_mean_01.type GAUGE
+tcp_speed_trimmed_mean_01.colour 808080
+tcp_speed_percentile_5.label 5th percentile of speed
+tcp_speed_percentile_5.type GAUGE
+tcp_speed_percentile_5.colour 0022ff
+tcp_speed_percentile_50.label 50th percentile (median) of speed
+tcp_speed_percentile_50.type GAUGE
+tcp_speed_percentile_50.colour 00ff7f
+tcp_speed_percentile_95.label 95th percentile of speed
+tcp_speed_percentile_95.type GAUGE
+tcp_speed_percentile_95.colour ff3333
+
+
+multigraph ss_tcp_rtt
+graph_category network
+graph_title RTT (Round Trip Time) to clients
+graph_vlabel ms
+graph_args --base 1000 -l 0.1 --logarithmic --rigid
+graph_scale no
+
+tcp_rtt_total_count.label Total clients
+tcp_rtt_total_count.type GAUGE
+tcp_rtt_total_count.colour 000000
+tcp_rtt_min.label Minimum rtt
+tcp_rtt_min.type GAUGE
+tcp_rtt_min.colour ff00ff
+tcp_rtt_max.label Maximum rtt
+tcp_rtt_max.type GAUGE
+tcp_rtt_max.colour ffa500
+tcp_rtt_mean.label Mean rtt
+tcp_rtt_mean.type GAUGE
+tcp_rtt_mean.colour 4169e1
+tcp_rtt_trimmed_mean_01.label 0.1 trimmed mean rtt
+tcp_rtt_trimmed_mean_01.type GAUGE
+tcp_rtt_trimmed_mean_01.colour 808080
+tcp_rtt_percentile_5.label 5th percentile of rtt
+tcp_rtt_percentile_5.type GAUGE
+tcp_rtt_percentile_5.colour 0022ff
+tcp_rtt_percentile_50.label 50th percentile (median) of rtt
+tcp_rtt_percentile_50.type GAUGE
+tcp_rtt_percentile_50.colour 00ff7f
+tcp_rtt_percentile_95.label 95th percentile of rtt
+tcp_rtt_percentile_95.type GAUGE
+tcp_rtt_percentile_95.colour ff3333
+
+
+multigraph ss_tcp_rttvar
+graph_category network
+graph_title RTT (Round Trip Time) variance to clients
+graph_vlabel ms
+graph_args --base 1000 -l 0.1 --logarithmic --rigid
+graph_scale no
+
+tcp_rttvar_total_count.label Total clients
+tcp_rttvar_total_count.type GAUGE
+tcp_rttvar_total_count.graph no
+tcp_rttvar_total_count.colour 000000
+tcp_rttvar_min.label Minimum rtt variance
+tcp_rttvar_min.type GAUGE
+tcp_rttvar_min.colour ff00ff
+tcp_rttvar_max.label Maximum rtt variance
+tcp_rttvar_max.type GAUGE
+tcp_rttvar_max.colour ffa500
+tcp_rttvar_mean.label Mean rtt variance
+tcp_rttvar_mean.type GAUGE
+tcp_rttvar_mean.colour 4169e1
+tcp_rttvar_trimmed_mean_01.label 0.1 trimmed mean rtt variance
+tcp_rttvar_trimmed_mean_01.type GAUGE
+tcp_rttvar_trimmed_mean_01.colour 808080
+tcp_rttvar_percentile_5.label 5th percentile of rtt variance
+tcp_rttvar_percentile_5.type GAUGE
+tcp_rttvar_percentile_5.colour 0022ff
+tcp_rttvar_percentile_50.label 50th percentile (median) of rtt variance
+tcp_rttvar_percentile_50.type GAUGE
+tcp_rttvar_percentile_50.colour 00ff7f
+tcp_rttvar_percentile_95.label 95th percentile of rtt variance
+tcp_rttvar_percentile_95.type GAUGE
+tcp_rttvar_percentile_95.colour ff3333
+
+
+EOF
+        exit 0;
+}
+
+my (@stat_speed, @stat_rtt, @stat_rttvar);
+
+open (SS, "ss -i -t 'sport = :http and not dst 127.0.0.1 and not dst [::1]' |") or die("Can't exec ss: ");
+
+while (<SS>) { 
+	# ss output is made for human consumption :(
+	if (m/send (.*?)([M|K|]bps) /){ # ss output is formated using sprint_bw
+	# currently it only converts bps to Kbps or Mbps if needed, not bigger
+		my ($speed,$unit)=($1,$2); 
+		if ("Mbps" eq $unit){ 
+			$speed=$speed*1000000; 
+		}elsif ("Kbps" eq $unit) { 
+			$speed=$speed*1000; 
+		} 
+		push @stat_speed, $speed;
+	}
+
+	if (m/rtt:([0-9\.]+)\/([0-9\.]+) /){
+		my ($rtt,$var)=($1,$2); 
+		push @stat_rtt, $rtt;
+		push @stat_rttvar, $var;
+	}
+} 
+close SS;
+
+if (0 == scalar(@stat_speed)){
+	print <<EOF;
+multigraph ss_tcp_speed
+tcp_speed_total_count.value 0
+tcp_speed_min.value U
+tcp_speed_max.value U
+tcp_speed_mean.value U
+tcp_speed_trimmed_mean_01.value U
+tcp_speed_percentile_5.value U
+tcp_speed_percentile_50.value U
+tcp_speed_percentile_95.value U
+multigraph ss_tcp_rtt
+tcp_rtt_total_count.value 0
+tcp_rtt_min.value U
+tcp_rtt_max.value U
+tcp_rtt_mean.value U
+tcp_rtt_trimmed_mean_01.value U
+tcp_rtt_percentile_5.value U
+tcp_rtt_percentile_50.value U
+tcp_rtt_percentile_95.value U
+multigraph ss_tcp_rttvar
+tcp_rttvar_total_count.value 0
+tcp_rttvar_min.value U
+tcp_rttvar_max.value U
+tcp_rttvar_mean.value U
+tcp_rttvar_trimmed_mean_01.value U
+tcp_rttvar_percentile_5.value U
+tcp_rttvar_percentile_50.value U
+tcp_rttvar_percentile_95.value U
+EOF
+}else{
+
+	print "multigraph ss_tcp_speed\n";
+	get_stats("tcp_speed", @stat_speed);
+
+	print "multigraph ss_tcp_rtt\n";
+	get_stats("tcp_rtt", @stat_rtt);
+
+	print "multigraph ss_tcp_rttvar\n";
+	get_stats("tcp_rttvar", @stat_rttvar);
+
+}
